@@ -71,7 +71,7 @@ app.post('/register', (req, res) => {
                 return res.status(401).json({ message: 'Geçersiz e-posta adresi veya şifre.' });
             }
 
-            res.status(200).json({ message: 'Başarıyla giriş yapıldı.' });
+            res.status(200).json({ email: user.email, usertype: user.usertype, id: user.id});
         });
     });
 });
@@ -102,7 +102,7 @@ app.get('/home/reservations', (req, res) => {
         return res.status(400).json({ message: 'Tarih belirtilmedi.' });
     }
 
-    let sql = 'SELECT * FROM reservations WHERE reservation_date = ? AND is_accepted = 1';
+    let sql = 'SELECT reservation_time FROM reservations WHERE reservation_date = ? AND is_accepted = 1';
     db.query(sql, [date], (err, results) => {
         if (err) {
             return res.status(500).json({ message: 'Sunucu hatası', error: err });
@@ -112,9 +112,13 @@ app.get('/home/reservations', (req, res) => {
             return res.status(404).json({ message: 'Belirtilen tarihe ait rezervasyon bulunamadı.' });
         }
 
-        res.status(200).json(results);
+        // Sadece reservation_time alanlarını içeren yeni bir dizi oluştur
+        const reservationTimes = results.map(result => result.reservation_time);
+
+        res.status(200).json(reservationTimes);
     });
 });
+
 
 // Get unaccepted reservations endpoint
 app.get('/unaccepted-reservations', (req, res) => {
