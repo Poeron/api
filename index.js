@@ -122,7 +122,10 @@ app.get('/home/reservations', (req, res) => {
 
 // Get unaccepted reservations endpoint
 app.get('/unaccepted-reservations', (req, res) => {
-let sql = 'SELECT * FROM reservations WHERE is_accepted = 0';
+let sql = `SELECT r.id, r.reservation_date, r.reservation_time, u.name 
+FROM reservations r
+JOIN users u ON r.user_id = u.id
+WHERE r.is_accepted = 0;`;
     db.query(sql, (err, results) => {
         if (err) {
             return res.status(500).json({ message: 'Sunucu hatası', error: err });
@@ -174,7 +177,11 @@ app.delete('/reservations/:id', (req, res) => {
 
 // Get accepted reservations endpoint
 app.get('/accepted-reservations', (req, res) => {
-    let sql = 'SELECT * FROM reservations WHERE is_accepted = 1 ORDER BY reservation_date ASC';
+    let sql = `SELECT r.id, r.reservation_date, r.reservation_time, u.name 
+    FROM reservations r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.is_accepted = 1
+    ORDER BY reservation_date ASC;`
         db.query(sql, (err, results) => {
             if (err) {
                 return res.status(500).json({ message: 'Sunucu hatası', error: err });
