@@ -204,30 +204,6 @@ app.get('/accepted-reservations', (req, res) => {
     });
 });
 
-// Get user by id endpoint
-app.get('/email/:id', (req, res) => {
-    const userId = req.params.id;
-
-    // MySQL sorgusu
-    const sql = `SELECT email FROM users WHERE id = ${userId}`;
-
-    // Sorguyu çalıştırma
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error('Error executing MySQL query:', err);
-            res.status(500).json({ error: 'Veritabanı hatası' });
-            return;
-        }
-
-        if (results.length === 0) {
-            res.status(404).json({ error: 'Kullanıcı bulunamadı' });
-            return;
-        }
-
-        const email = results[0].email;
-        res.json({ email });
-    });
-});
 
 // Send email when reservation is created
 app.post("/sendEmail", async (req, res) => {
