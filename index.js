@@ -2,9 +2,19 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
 const mysql = require('mysql');
+const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Nodemailer transporter oluşturma
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "carwashappnotification@gmail.com", // Gönderen e-posta adresi
+      pass: "exvr bera rhbg jzlq",
+    },
+});
 
 // MySQL bağlantı bilgileri
 const db = mysql.createConnection({
@@ -46,10 +56,10 @@ app.post('/register', (req, res) => {
             res.status(201).json({ message: 'Kullanıcı başarıyla kaydedildi' });
         });
     });
-    });
+});
 
 // Login endpoint
-    app.post('/login', (req, res) => {
+app.post('/login', (req, res) => {
     const { email, password } = req.body;
 
     // MySQL sorgusu ile kullanıcıyı bul
@@ -71,7 +81,7 @@ app.post('/register', (req, res) => {
                 return res.status(401).json({ message: 'Geçersiz e-posta adresi veya şifre.' });
             }
 
-            res.status(200).json({ email: user.email, usertype: user.usertype, id: user.id});
+            res.status(200).json({ email: user.email, usertype: user.usertype, id: user.id });
         });
     });
 });
@@ -79,18 +89,18 @@ app.post('/register', (req, res) => {
 // Make Reservation endpoint
 app.post('/reservations', (req, res) => {
     let newReservation = {
-      user_id: req.body.user_id,
-      reservation_date: req.body.reservation_date,
-      reservation_time: req.body.reservation_time
+        user_id: req.body.user_id,
+        reservation_date: req.body.reservation_date,
+        reservation_time: req.body.reservation_time
     };
-  
+
     let sql = 'INSERT INTO reservations SET ?';
     db.query(sql, newReservation, (err, result) => {
-      if (err) {
-        res.status(500).send(err);
-      } else {
-        res.status(201).send({ id: result.insertId, ...newReservation });
-      }
+        if (err) {
+            res.status(500).send(err);
+        } else {
+            res.status(201).send({ id: result.insertId, ...newReservation });
+        }
     });
 });
 
@@ -119,13 +129,12 @@ app.get('/home/reservations', (req, res) => {
     });
 });
 
-
 // Get unaccepted reservations endpoint
 app.get('/unaccepted-reservations', (req, res) => {
-let sql = `SELECT r.id, r.reservation_date, r.reservation_time, u.name 
-FROM reservations r
-JOIN users u ON r.user_id = u.id
-WHERE r.is_accepted = 0;`;
+    let sql = `SELECT r.id, r.reservation_date, r.reservation_time, u.name 
+    FROM reservations r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.is_accepted = 0;`;
     db.query(sql, (err, results) => {
         if (err) {
             return res.status(500).json({ message: 'Sunucu hatası', error: err });
@@ -181,19 +190,119 @@ app.get('/accepted-reservations', (req, res) => {
     FROM reservations r
     JOIN users u ON r.user_id = u.id
     WHERE r.is_accepted = 1
-    ORDER BY reservation_date ASC;`
-        db.query(sql, (err, results) => {
-            if (err) {
-                return res.status(500).json({ message: 'Sunucu hatası', error: err });
-            }
-    
-            if (results.length === 0) {
-                return res.status(404).json({ message: 'Kabul edilmiş rezervasyon bulunamadı.' });
-            }
-    
-            res.status(200).json(results);
-        });
+    ORDER BY reservation_date ASC;`;
+    db.query(sql, (err, results) => {
+        if (err) {
+            return res.status(500).json({ message: 'Sunucu hatası', error: err });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'Kabul edilmiş rezervasyon bulunamadı.' });
+        }
+
+        res.status(200).json(results);
     });
+});
+
+// Get user by id endpoint
+app.get('/email/:id', (req, res) => {
+    const userId = req.params.id;
+
+    // MySQL sorgusu
+    const sql = `SELECT email FROM users WHERE id = ${userId}`;
+
+    // Sorguyu çalıştırma
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error('Error executing MySQL query:', err);
+            res.status(500).json({ error: 'Veritabanı hatası' });
+            return;
+        }
+
+        if (results.length === 0) {
+            res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+            return;
+        }
+
+        const email = results[0].email;
+        res.json({ email });
+    });
+});
+
+// Send email when reservation is created
+app.post("/sendEmail", async (req, res) => {
+    try {
+        const { reservation_id } = req.body;
+
+        // Reservation verilerini al
+        db.query(
+            "SELECT * FROM reservations WHERE id = ?",
+            [reservation_id],
+            (err, reservationResult) => {
+                if (err) {
+                    console.error("Rezervasyon sorgulanırken bir hata oluştu: " + err.message);
+                    res.status(500).send("E-posta gönderilirken bir hata oluştu.");
+                    return;
+                }
+
+                if (reservationResult.length > 0) {
+                    const reservationData = reservationResult[0];
+                    const userId = reservationData.user_id;
+
+                    // Kullanıcının email adresini al
+                    db.query(
+                        "SELECT email FROM users WHERE id = ?",
+                        [userId],
+                        (err, userResult) => {
+                            if (err) {
+                                console.error("Kullanıcı sorgulanırken bir hata oluştu: " + err.message);
+                                res.status(500).send("E-posta gönderilirken bir hata oluştu.");
+                                return;
+                            }
+
+                            if (userResult.length > 0) {
+                                const userEmail = userResult[0].email;
+
+                                // Mail seçeneklerini ayarlayın
+                                let mailOptions = {
+                                    from: "carwashappnotification@gmail.com", // Gönderen e-posta adresi
+                                    to: userEmail, // Alıcı e-posta adresi
+                                    subject: "Rezervasyon Oluşturuldu", // E-posta konusu
+                                    html: `
+                                        <h1>Rezervasyon Detayları</h1>
+                                        <p><strong>Rezervasyon ID:</strong> ${reservationData.id}</p>
+                                        <p><strong>Kullanıcı ID:</strong> ${reservationData.user_id}</p>
+                                        <p><strong>Rezervasyon Tarihi:</strong> ${new Date(reservationData.reservation_date).toLocaleDateString()}</p>
+                                        <p><strong>Rezervasyon Saati:</strong> ${reservationData.reservation_time}</p>
+                                        <p><strong>Durum:</strong> ${reservationData.is_accepted ? 'Kabul Edildi' : 'Kabul Edilmedi'}</p>
+                                    `
+                                };
+
+                                // Maili gönderin
+                                transporter.sendMail(mailOptions, (error, info) => {
+                                    if (error) {
+                                        console.error("E-posta gönderilirken bir hata oluştu:", error);
+                                        res.status(500).json({ message: "E-posta gönderilirken bir hata oluştu." });
+                                    } else {
+                                        console.log("E-posta başarıyla gönderildi:", info.response);
+                                        res.status(200).json({ message: "E-posta başarıyla gönderildi." });
+                                    }
+                                });
+                            } else {
+                                res.status(404).json({ message: "Kullanıcı bulunamadı." });
+                            }
+                        }
+                    );
+                } else {
+                    res.status(404).json({ message: "Rezervasyon bulunamadı." });
+                }
+            }
+        );
+    } catch (error) {
+        console.error("E-posta gönderilirken bir hata oluştu:", error);
+        res.status(500).json({ message: "E-posta gönderilirken bir hata oluştu." });
+    }
+});
 
 // Server listen
 app.listen(PORT, () => {
